@@ -1,0 +1,39 @@
+WITH careaware_personnel AS (
+SELECT prsnl.*
+     , personnel.* 
+     , personnel_role.*
+     , row_number() over (partition by personnel_role.personnel_id order by personnel_role.rpt_version desc) as current_rolenum
+  FROM /* Millennium table */
+       BOSTONCHILDRENS_PROD.PRSNL prsnl
+  JOIN /* Millennium aliases */
+       BOSTONCHILDRENS_IBCL_CHLD_MA_P647.CA_D_PERSONNEL_ALIAS personnel_alias
+    ON personnel_alias.alias_id = prsnl.username
+   AND personnel_alias.alias_context = 'USERNAME'
+   AND personnel_alias.alias_issuer = 'CERNER_MILLENNIUM'
+  JOIN /* Main table, PERSONNEL_ID as main identifier, but also has CCMP_ID and DIRECTORY_ENTRY_ID      
+          CCMP_ID seems to be the careaware connect messenger profile id, 
+          which takes the form 'f4ba19f6-50f0-4bc6-a159-e402e0a9af78@chld_ma.p647.cloud_prod.caconnect.com'
+          This ID is associated with Connect Messenger and Voice sessions
+          
+          NOTE: THERE IS A DIFFERENCE BETWEEN THIS TABLE AND CA_D_CONNECT_PERSONNEL!!!!!!
+                Need more investigation
+        */
+       BOSTONCHILDRENS_IBCL_CHLD_MA_P647.CA_D_PERSONNEL personnel
+    ON personnel.personnel_id =  personnel_alias.personnel_id
+  JOIN /* "Role" in CareAware is "Position" in Millennium
+        When we talk about "claiming a role in CA,  we mean "claiming a profile" 
+        The role/position recorded in the CA DB has a record every position change! 
+        so need to the the latest one. The latest record in terms of rpt_extract_dttm, 
+        rpt_last_processed_dttm, or rpt_version is the current role
+        
+        The role has a corresponding role_id in CA, which parallels the position_cd in Millennium
+        The role display is role_name.    
+       */
+       BOSTONCHILDRENS_IBCL_CHLD_MA_P647.CA_D_PERSONNEL_ROLE personnel_role
+    ON personnel.personnel_id =  personnel_role.personnel_id
+) 
+
+select * 
+  from careaware_personnel 
+ where username = 'AKINS_L' --'CH121199'
+   AND current_rolenum = 1 /* the latest role/position only */
