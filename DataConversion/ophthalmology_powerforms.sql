@@ -135,7 +135,7 @@ JOIN clinical_event ce_docm
   ON ce_docm.parent_event_id = ce_sect.event_id
  AND ce_docm.valid_until_dt_tm > current_date() 
  AND ce_docm.result_status_cd in (25,34,35) /* Include this so we do not include uncharted EC/DTA's */
-WHERE ce_form.event_end_dt_tm >= dateadd(DAY,-30,current_date()) /* One year's worth of data */
+WHERE ce_form.event_end_dt_tm >= dateadd(DAY,-365,current_date()) /* One year's worth of data */
   AND ce_form.valid_until_dt_tm > current_date() /* XAK2 */
   AND ce_form.result_status_cd IN (25,34,35) /* Auth, Modified,Modified */
 ),
@@ -211,11 +211,11 @@ ORDER BY mrn,csn,result_datetime,epic_exam_area,epic_data_element
 ),
 ophthalmology_aggregation as (
  /* Fancy listagg of rows that occur more than once: https://stackoverflow.com/questions/68974553/snowflake-sql-concat-values-from-multiple-rows-based-on-shared-key */
- select mrn,csn,result_datetime,epic_exam_area,epic_data_element,
+ select mrn,csn,result_datetime,epic_exam_area,epic_data_element,epic_cui,
        listagg(epic_data_val,'; ') within group(order by result_text) as epic_data_val 
 from ophthalmology_transform
-group by mrn,csn,result_datetime,epic_exam_area,epic_data_element
-ORDER BY mrn,csn,result_datetime,epic_exam_area,epic_data_element
+group by mrn,csn,result_datetime,epic_exam_area,epic_data_element,epic_cui
+ORDER BY mrn,csn,result_datetime,epic_exam_area,epic_data_element,epic_cui
 )
 
 /* Report aggregates, too */
