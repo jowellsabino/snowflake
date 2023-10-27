@@ -1,16 +1,9 @@
-/* Store mapping of Cerner-to-Epic concepts here */
-CREATE OR REPLACE TEMP TABLE ec_ophtho_map (
---epic_description varchar(40),
---epic_concept varchar(40),
---cerner_form (varchar(40),
---cerner_section varchar(40),
---cerner_concept varchar(40),
-cerner_event_code varchar(40),
-epic_concept varchar(40)
-);
-
-/* See https://community.snowflake.com/s/article/how-to-load-a-few-columns-from-a-csv-file-into-a-new-snowflake-table */
-/* CSV data format */
+/* The Cerner-to-Epic concept mappings will come in the form of a CSV file
+ *  with a column for Cerner event code mapped to another column of Epic concept 
+ *
+ *  See https://community.snowflake.com/s/article/how-to-load-a-few-columns-from-a-csv-file-into-a-new-snowflake-table 
+ *  CSV data format 
+ */
 CREATE OR REPLACE TEMP FILE FORMAT csv_ophtho
     TYPE = CSV
     COMPRESSION = 'AUTO'
@@ -19,7 +12,7 @@ CREATE OR REPLACE TEMP FILE FORMAT csv_ophtho
  	SKIP_HEADER = 1
  	FIELD_OPTIONALLY_ENCLOSED_BY = '\042' 
  	TRIM_SPACE = FALSE 
- 	ERROR_ON_COLUMN_COUNT_MISMATCH = FALSE
+ 	ERROR_ON_COLUMN_COUNT_MISMATCH = TRUE
  	ESCAPE = 'NONE' 
  	ESCAPE_UNENCLOSED_FIELD = '\134' 
  	DATE_FORMAT = 'mm/dd/yyyy' 
@@ -28,14 +21,65 @@ CREATE OR REPLACE TEMP FILE FORMAT csv_ophtho
  	COMMENT = 'parse comma-delimited, double-quoted data';
 
 
- /* Need to put the file contents on personal staging area in Snowflake */
- PUT file://~/Documents/Epic/ec_ophtho_map.csv @~/ec_ophtho_map.csv;
+ /* Need to put the file contents on personal staging area in Snowflake 
+    Alias-mapped omv6/NAS to /Users/jowell/Docuemnts/NAS */
+ PUT file:///Users/jowell/Documents/Epic/ec_ophtho_map.csv @~/ec_ophtho_map.csv AUTO_COMPRESS=FALSE OVERWRITE=TRUE;
+
+/* Create a remporary mapping of Cerner-to-Epic concepts 
+ * Cerner Opthalmology Code	
+ * Cerner Opthalmology Name	
+ * Usage in Cerner	
+ * % of Total Usage	
+ * In Scope?	
+ * Epic FDC ID (Item .1) 
+ * Epic FDC Name (Item .2) 	
+ * Epic FDC MPI ID (Item 5001)	
+ * HL7 Assigning Coding System (IIT Item 630)	
+ * Epic FLO ID .1 (FDC Item 100)	
+ * Epic FLO Name .2 (FDC Item .100)	
+ * Comments	
+ * Tech Column - VitalsCode	
+ * Tech Column - VitalsCodeIIT
+ */
+ /*
+  * Exam Area	
+  * Data Element	
+  * Comments	
+  * BCH Form	
+  * BCH Section	
+  * BCH Data Element Display	
+  * BCH Data Element Event Code
+  */
+CREATE OR REPLACE TEMP TABLE ec_ophtho_map (
+epic_exam_area varchar(40),
+epic_data_element varchar(40),
+epic_cui varchar(40),
+epic_format varchar(40),
+comment varchar(80),
+cerner_form varchar(40),
+cerner_section varchar(40),
+cerner_event_display varchar(60),
+cerner_event_code varchar(40)
+--cerner_usage float,
+--cerner_percent float,
+--cerner_scope varchar(2),
+--epic_fdc_id varchar(40),
+--epic_fdc_name varchar(40),
+--epic_fdc_mpi_id varchar(40),
+--hl7_assigning_codeing_system varchar(40),
+--epic_flo_id varchar(40),
+--epic_flo_name varchar(40),
+--comments varchar(40),
+--tech_column_vitalscode varchar(40),
+--tech_column_vitalscodeIIT  varchar(40)
+);
 
 /* Copy contents in personal staging area to table */
  COPY INTO ec_ophtho_map FROM @~/ec_ophtho_map.csv 
-  FILE_FORMAT = csv_ophtho;
+  FILE_FORMAT = csv_ophtho,
+  ON_ERROR = CONTINUE;
 
- /* Another option to insert contenst to tenp table */
+ /* Another option to insert contenst to temp table */
  /*
  INSERT INTO ec_ophtho_map (cerner_event_code,epic_concept) 
   VALUES (
@@ -48,7 +92,21 @@ CREATE OR REPLACE TEMP FILE FORMAT csv_ophtho
  --FROM ec_ophtho_map;
  
 
-WITH ophthalmology_form AS (
+WITH ec_map as (
+SELECT cerner_form,
+       cerner_section,
+       cerner_event_display,
+       cerner_event_code,
+       epic_exam_area,
+       epic_data_element,
+       epic_cui,
+       epic_format /* String, 0 or 1, custom */
+from ec_ophtho_map
+where cerner_event_code is not null
+  and epic_data_element is not null
+  --and cerner_event_code = '2820876'
+),
+ophthalmology_form AS (
 SELECT ce_form.PERSON_ID AS person_id,
        ce_form.ENCNTR_ID AS encntr_id,
        --ce_form.event_id,
@@ -62,8 +120,9 @@ SELECT ce_form.PERSON_ID AS person_id,
        ce_sect.EVENT_TITLE_TEXT AS section_name,
        --ce_sect.EVENT_END_DT_TM AS section_datetime,
        --ce_sect.RESULT_VAL AS section_result /* Empty */
+       ce_docm.event_id,
        ce_docm.EVENT_END_DT_TM AS result_datetime,
-       ce_docm.EVENT_TITLE_TEXT AS result_text,
+       ce_docm.EVENT_TITLE_TEXT AS result_text, /* event_cd display */
        ce_docm.EVENT_CD,
        ce_docm.RESULT_VAL AS result_val
 FROM clinical_event ce_form 
@@ -76,21 +135,23 @@ JOIN clinical_event ce_docm
   ON ce_docm.parent_event_id = ce_sect.event_id
  AND ce_docm.valid_until_dt_tm > current_date() 
  AND ce_docm.result_status_cd in (25,34,35) /* Include this so we do not include uncharted EC/DTA's */
-WHERE ce_form.event_cd IN (
-      905600649.00,	        --  	Ophthalmology New - Form	
-      905475781.00,	        --		Optical Rx (Gas Permeable Contacts)-Form	
-      905468207.00,	        -- 		Optical Rx (Glasses) - Form	
-      905470919.00	        --		Optical Rx (Soft Contacts) - Form	  
-      )
-  AND ce_form.event_end_dt_tm >= dateadd(MONTH,-1,current_date()) /* One year's worth of data */
+WHERE ce_form.event_end_dt_tm >= dateadd(DAY,-30,current_date()) /* One year's worth of data */
   AND ce_form.valid_until_dt_tm > current_date() /* XAK2 */
   AND ce_form.result_status_cd IN (25,34,35) /* Auth, Modified,Modified */
 ),
 ophthalmology_extract AS (
 SELECT pa.alias AS MRN,
        ea.alias AS CSN,
+       ec_map.epic_exam_area,
+       ec_map.epic_data_element,
+       ec_map.epic_cui,
+       ec_map.epic_format,
        ophthalmology_form.*
 from ophthalmology_form
+JOIN ec_map 
+  ON ec_map.cerner_event_code = ophthalmology_form.event_cd /* This is the mapping table */
+ AND ec_map.cerner_form = ophthalmology_form.form_name
+ AND ec_map.cerner_section = ophthalmology_form.section_name
 JOIN person p 
   ON p.person_id = ophthalmology_form.person_id
 JOIN person_alias pa
@@ -103,11 +164,62 @@ JOIN encntr_alias ea
   ON ea.encntr_id = ophthalmology_form.encntr_id
  AND ea.end_effective_dt_tm > current_date()
  AND ea.encntr_alias_type_cd = 1077 /* CSN */
- )
-
-SELECT mrn,csn,encntr_id,
+ ),
+ophthalmology_transform as (
+/* Transformation */
+SELECT mrn,csn,
        form_name,
        section_name, 
-       result_datetime,result_text, event_cd,result_val
+       result_datetime,
+       result_text, 
+       event_cd,
+       result_val,
+       epic_exam_area,
+       epic_data_element,
+       epic_cui,
+       epic_format,
+       /* Transformation rules */
+       case 
+          /* 0 or 1 values in Epic */
+          when result_text = 'Nystagmus' 
+               then iff (result_val = 'Absent','0','1') 
+          when result_text in ('Optical Rx (Soft Contacts) - Form','Optical Rx (Gas Permeable Contacts)-Form')       
+               then case when form_name in ('Optical Rx (Soft Contacts)','Optical Rx (Specialty Contacts)')
+                              then 'Contacts'
+                    else 'Glasses' 
+               end
+          /* Date reformatting in YYYY-MM-DD HH:MM:SS */
+          /* In CCL this would have been (https://community.cerner.com/t5/CCL-Discern-Explorer-Client-and-Cerner-Collaboration/Format-Date-in-Result-val-in-Clinical-event-table/m-p/772807)
+                 format(cnvtdatetime(cnvtdate2(substring(3,8,result_val),"yyyymmdd"),
+                                     cnvttime2(substring(11,6,result_val),"HHMMSS")),"mm/dd/yyyy hh:mm:ss;;d") */
+          when result_text in ('Tonometry Time of Day',
+                               'Vision Correction Expiration Date GL',
+                               'Vision Correction Expiration Date SCL')
+               then substr(result_val,3,4) || '-' || substr(result_val,7,2) || '-' || substr(result_val,9,2) ||
+                    ' ' || substr(result_val,11,2) || ':' || substr(result_val,13,2) || ':' || substr(result_val,15,2) 
+          when result_text in ('Vision Correction Substitutions SCL' )   
+              then 'Substitution: ' || result_val
+          when result_text in ('Vision Correction Disposal Schedule SCL')
+              then 'Disposal: '  || result_val
+          when result_text in ('Vision Correction Contact Refill SCL')
+              then 'Refill: ' || result_val      
+          else result_val
+       end as epic_data_val
+     --  listagg(result_val,',') within group(order by result_val)   
 FROM ophthalmology_extract
-ORDER BY mrn,csn,form_name,section_name;
+ORDER BY mrn,csn,result_datetime,epic_exam_area,epic_data_element
+),
+ophthalmology_aggregation as (
+ /* Fancy listagg of rows that occur more than once: https://stackoverflow.com/questions/68974553/snowflake-sql-concat-values-from-multiple-rows-based-on-shared-key */
+ select mrn,csn,result_datetime,epic_exam_area,epic_data_element,
+       listagg(epic_data_val,'; ') within group(order by result_text) as epic_data_val 
+from ophthalmology_transform
+group by mrn,csn,result_datetime,epic_exam_area,epic_data_element
+ORDER BY mrn,csn,result_datetime,epic_exam_area,epic_data_element
+)
+
+/* Report aggregates, too */
+select mrn,csn,result_datetime,epic_exam_area,epic_data_element,epic_cui,epic_data_val
+from ophthalmology_aggregation
+;
+ 
