@@ -154,6 +154,7 @@ JOIN ec_map
  AND ec_map.cerner_section = ophthalmology_form.section_name
 JOIN person p 
   ON p.person_id = ophthalmology_form.person_id
+AND p.name_last_key not like 'SYSTEMTEST%'
 JOIN person_alias pa
   ON pa.person_id = ophthalmology_form.person_id
  AND pa.person_alias_type_cd = 10
