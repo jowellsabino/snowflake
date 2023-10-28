@@ -51,15 +51,15 @@ CREATE OR REPLACE TEMP FILE FORMAT csv_ophtho
   * BCH Data Element Event Code
   */
 CREATE OR REPLACE TEMP TABLE ec_ophtho_map (
+cerner_form varchar(40),
+cerner_section varchar(40),
+cerner_event_display varchar(60),
+cerner_event_code varchar(40),
 epic_exam_area varchar(40),
 epic_data_element varchar(40),
 epic_cui varchar(40),
 epic_format varchar(40),
-comment varchar(80),
-cerner_form varchar(40),
-cerner_section varchar(40),
-cerner_event_display varchar(60),
-cerner_event_code varchar(40)
+comment varchar(80)
 --cerner_usage float,
 --cerner_percent float,
 --cerner_scope varchar(2),
@@ -93,14 +93,14 @@ cerner_event_code varchar(40)
  
 
 WITH ec_map as (
-SELECT cerner_form,
-       cerner_section,
-       cerner_event_display,
-       cerner_event_code,
-       epic_exam_area,
+SELECT epic_exam_area,
        epic_data_element,
        epic_cui,
-       epic_format /* String, 0 or 1, custom */
+       epic_format,  /* String, 0 or 1, custom */
+       cerner_form,
+       cerner_section,
+       cerner_event_display,
+       cerner_event_code
 from ec_ophtho_map
 where cerner_event_code is not null
   and epic_data_element is not null
@@ -183,7 +183,7 @@ SELECT mrn,csn,
           /* 0 or 1 values in Epic */
           when result_text = 'Nystagmus' 
                then iff (result_val = 'Absent','0','1') 
-          when result_text in ('Optical Rx (Soft Contacts) - Form','Optical Rx (Gas Permeable Contacts)-Form')       
+          when epic_data_element in ('Right Eye Type','Left Eye Type','Type')       
                then case when form_name in ('Optical Rx (Soft Contacts)','Optical Rx (Specialty Contacts)')
                               then 'Contacts'
                     else 'Glasses' 
@@ -192,17 +192,35 @@ SELECT mrn,csn,
           /* In CCL this would have been (https://community.cerner.com/t5/CCL-Discern-Explorer-Client-and-Cerner-Collaboration/Format-Date-in-Result-val-in-Clinical-event-table/m-p/772807)
                  format(cnvtdatetime(cnvtdate2(substring(3,8,result_val),"yyyymmdd"),
                                      cnvttime2(substring(11,6,result_val),"HHMMSS")),"mm/dd/yyyy hh:mm:ss;;d") */
-          when result_text in ('Tonometry Time of Day',
-                               'Vision Correction Expiration Date GL',
+          /* Date only */
+          when result_text in ('Vision Correction Expiration Date GP',
                                'Vision Correction Expiration Date SCL')
-               then substr(result_val,3,4) || '-' || substr(result_val,7,2) || '-' || substr(result_val,9,2) ||
-                    ' ' || substr(result_val,11,2) || ':' || substr(result_val,13,2) || ':' || substr(result_val,15,2) 
-          when result_text in ('Vision Correction Substitutions SCL' )   
+               then substr(result_val,3,4) || '-' || substr(result_val,7,2) || '-' || substr(result_val,9,2) 
+          /* Time only */     
+          when result_text in ('Tonometry Time of Day')
+              then substr(result_val,11,2) || ':' || substr(result_val,13,2) || ':' || substr(result_val,15,2)           
+          when result_text in ('Vision Correction Substitutions SCL','Vision Correction Substitutions GP' )   
               then 'Substitution: ' || result_val
-          when result_text in ('Vision Correction Disposal Schedule SCL')
+          when result_text in ('Vision Correction Disposal Schedule SCL','Vision Correction Disposal Schedule GP')
               then 'Disposal: '  || result_val
-          when result_text in ('Vision Correction Contact Refill SCL')
+          when result_text in ('Vision Correction Contact Refill SCL','Vision Correction Contact Refill GP')
               then 'Refill: ' || result_val      
+          when result_text in ('Vision Correction Ordering Provider SCL','Vision Correction Ordering Provider GP','Vision Correction Ordering Provider GL')
+              then 'Ordered by: ' || result_val      
+          when result_text in ('Vision Correction Reason For SCL','Vision Correction Reason For GP','Vision Correction Reason For GL')
+              then 'Correction for: ' || result_val  
+          when result_text in ('Vision Correction OD Contact Color GP','Vision Correction OS Contact Color GP')
+              then 'Contact color: ' || result_val   
+          when result_text in ('Vision Correction Type GL')
+              then 'Glass Type: ' || result_val  
+          when result_text in ('Vision Correction Prism Type GL')
+              then 'Prism Type: ' || result_val  
+          when result_text in ('Vision Correction Expiration Date GL')
+              then 'Expiration: ' || substr(result_val,3,4) || '-' || substr(result_val,7,2) || '-' || substr(result_val,9,2) 
+          when result_text in ('Vision Correct Recommend Lens Enhance GL')
+              then 'Rec enhancement: ' || result_val
+          when result_text in ('Correct Recommend Lens Enhance Sub GL')
+              then 'Rec enhancement subs: ' || result_val
           else result_val
        end as epic_data_val
      --  listagg(result_val,',') within group(order by result_val)   
