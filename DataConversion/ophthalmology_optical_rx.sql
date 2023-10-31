@@ -23,8 +23,7 @@ CREATE OR REPLACE TEMP FILE FORMAT csv_ophtho
 
  /* Need to put the file contents on personal staging area in Snowflake 
     Alias-mapped omv6/NAS to /Users/jowell/Docuemnts/NAS */
- /* PUT file:///Users/jowell/Documents/Epic/ec_ophtho_map_OpticalRx.csv @~/ec_ophtho_map.csv AUTO_COMPRESS=FALSE OVERWRITE=TRUE; */
- PUT file://Z:/Epic/ec_ophtho_map_OpticalRx.csv @~/ec_ophtho_map.csv AUTO_COMPRESS=FALSE OVERWRITE=TRUE; 
+ PUT file://Z:/Epic/ec_ophtho_map_OpticalRx.csv @~/ec_ophtho_map_OpticalRx.csv AUTO_COMPRESS=FALSE OVERWRITE=TRUE; 
 
 /* Create a remporary mapping of Cerner-to-Epic concepts 
  * Cerner Opthalmology Code	
