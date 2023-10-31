@@ -23,7 +23,8 @@ CREATE OR REPLACE TEMP FILE FORMAT csv_ophtho
 
  /* Need to put the file contents on personal staging area in Snowflake 
     Alias-mapped omv6/NAS to /Users/jowell/Docuemnts/NAS */
- PUT file:///Users/jowell/Documents/Epic/ec_ophtho_map.csv @~/ec_ophtho_map.csv AUTO_COMPRESS=FALSE OVERWRITE=TRUE;
+ -- PUT file:///Users/jowell/Documents/Epic/ec_ophtho_map.csv @~/ec_ophtho_map.csv AUTO_COMPRESS=FALSE OVERWRITE=TRUE;
+ PUT file://Z:/Epic/ec_ophtho_map.csv @~/ec_ophtho_map.csv AUTO_COMPRESS=FALSE OVERWRITE=TRUE;
 
 /* Create a remporary mapping of Cerner-to-Epic concepts 
  * Cerner Opthalmology Code	
@@ -136,7 +137,7 @@ JOIN clinical_event ce_docm
   ON ce_docm.parent_event_id = ce_sect.event_id
  AND ce_docm.valid_until_dt_tm > current_date() 
  AND ce_docm.result_status_cd in (25,34,35) /* Include this so we do not include uncharted EC/DTA's */
-WHERE ce_form.event_end_dt_tm >= dateadd(DAY,-365,current_date()) /* One year's worth of data */
+WHERE ce_form.event_end_dt_tm >= dateadd(DAY,-30,current_date()) /* One year's worth of data */
   AND ce_form.valid_until_dt_tm > current_date() /* XAK2 */
   AND ce_form.result_status_cd IN (25,34,35) /* Auth, Modified,Modified */
 ),
@@ -183,8 +184,62 @@ SELECT mrn,csn,
        /* Transformation rules */
        case 
           /* 0 or 1 values in Epic */
-          when result_text = 'Nystagmus' 
-               then iff (result_val = 'Absent','0','1') 
+          when result_text = 'Normal External Exam' 
+               then iff (result_val = 'External exam unremarkable','1','0') 
+          when result_text =  'Anterior Chamber OD' AND epic_data_element = 'Right Eye AC Normal'
+               then iff(result_val = 'Unremarkable depth, no cells or flare','1','0') 
+          when result_text =  'Anterior Chamber OS' AND epic_data_element = 'Left Eye AC Normal'
+               then iff(result_val = 'Unremarkable depth, no cells or flare','1','0') 
+          when result_text =  'Anterior Vitreous OD' AND epic_data_element = 'Right Eye Virteous Normal'
+               then iff(result_val = 'Clear','1','0') 
+          when result_text =  'Anterior Vitreous OS' AND epic_data_element = 'Left Eye Vitreous Normal'
+               then iff(result_val = 'Clear','1','0') 
+          when result_text =  'Conjunctiva/Sclera OD' AND epic_data_element = 'Right Eye Conjunctiva Normal'
+               then iff(result_val = 'White and quiet','1','0') 
+          when result_text =  'Conjunctiva/Sclera OS' AND epic_data_element = 'Left Eye Conjunctiva Normal'
+               then iff(result_val = 'White and quiet','1','0') 
+          when result_text =  'Cornea OD' AND epic_data_element = 'Right Eye Cornea Normal'
+               then iff(result_val = 'Unremarkable tear film, epithelium, stroma','1','0') 
+          when result_text =  'Cornea OS' AND epic_data_element = 'Left Eye Cornea Normal'
+               then iff(result_val = 'Unremarkable tear film, epithelium, stroma','1','0') 
+          when result_text =  'Disc OD' AND epic_data_element = 'Right Eye Disc Normal'
+               then iff(result_val = 'Pink, flat, sharp margins','1','0') 
+          when result_text =  'Disc OS' AND epic_data_element = 'Left Eye Disc Normal'
+               then iff(result_val = 'Pink, flat, sharp margins','1','0') 
+          when result_text =  'Iris OD' AND epic_data_element = 'Right Eye Iris Normal'
+               then iff(result_val = 'Unremarkable','1','0') 
+          when result_text =  'Iris OS' AND epic_data_element = 'Left Eye Iris Normal'
+               then iff(result_val = 'Unremarkable','1','0') 
+          when result_text =  'Lens OD' AND epic_data_element = 'Right Eye Lens Normal'
+               then iff(result_val = 'Clear, with normal capsule, cortex, and nucleus','1','0') 
+          when result_text =  'Lens OS' AND epic_data_element = 'Left Eye Lens Normal'
+               then iff(result_val = 'Clear, with normal capsule, cortex, and nucleus','1','0') 
+          when result_text =  'Lids, Lashes OD' AND epic_data_element = 'Right Eye Lids Normal'
+               then iff(result_val = 'Unremarkable','1','0') 
+          when result_text =  'Lids, Lashes OS' AND epic_data_element = 'Left Eye Lids Normal'
+               then iff(result_val = 'Unremarkable','1','0') 
+          when result_text =  'Macula OD' AND epic_data_element = 'Right Eye Macula Normal'
+               then iff(result_val = 'Unremarkable','1','0') 
+          when result_text =  'Macula OS' AND epic_data_element = 'Left Eye Macula Normal'
+               then iff(result_val = 'Unremarkable','1','0') 
+          when result_text =  'Periphery OD' AND epic_data_element = 'Right Eye Periphery Normal'
+               then iff(result_val = 'Unremarkable','1','0') 
+          when result_text =  'Periphery OS' AND epic_data_element = 'Left Eye Periphery Normal'
+               then iff(result_val = 'Unremarkable','1','0') 
+          when result_text =  'Vessels OD' AND epic_data_element = 'Right Eye Vessels Normal'
+               then iff(result_val = 'Unremarkable course and caliber','1','0') 
+          when result_text =  'Vessels OS' AND epic_data_element = 'Left Eye Vessels Normal'
+               then iff(result_val = 'Unremarkable course and caliber','1','0') 
+          when result_text =  'Vitreous OD' AND epic_data_element = 'Right Eye Vitreous Normal'
+               then iff(result_val = 'Clear','1','0') 
+          when result_text =  'Vitreous OS' AND epic_data_element = 'Left Eye Vitreous Normal'
+               then iff(result_val = 'Clear','1','0') 
+          when result_text = 'Iris Color OD'
+              then 'Iris Color Right:' || result_val
+          when result_text = 'Iris Color OS'
+              then 'Iris Color Left:' || result_val
+
+          /* 
           when epic_data_element in ('Right Eye Type','Left Eye Type','Type')       
                then case when form_name in ('Optical Rx (Soft Contacts)','Optical Rx (Specialty Contacts)')
                               then 'Contacts'
@@ -193,12 +248,12 @@ SELECT mrn,csn,
           /* Date reformatting in YYYY-MM-DD HH:MM:SS */
           /* In CCL this would have been (https://community.cerner.com/t5/CCL-Discern-Explorer-Client-and-Cerner-Collaboration/Format-Date-in-Result-val-in-Clinical-event-table/m-p/772807)
                  format(cnvtdatetime(cnvtdate2(substring(3,8,result_val),"yyyymmdd"),
-                                     cnvttime2(substring(11,6,result_val),"HHMMSS")),"mm/dd/yyyy hh:mm:ss;;d") */
-          /* Date only */
+                                     cnvttime2(substring(11,6,result_val),"HHMMSS")),"mm/dd/yyyy hh:mm:ss;;d") 
+          /* Date only 
           when result_text in ('Vision Correction Expiration Date GP',
                                'Vision Correction Expiration Date SCL')
                then substr(result_val,3,4) || '-' || substr(result_val,7,2) || '-' || substr(result_val,9,2) 
-          /* Time only */     
+          /* Time only      
           when result_text in ('Tonometry Time of Day')
               then substr(result_val,11,2) || ':' || substr(result_val,13,2) || ':' || substr(result_val,15,2)           
           when result_text in ('Vision Correction Substitutions SCL','Vision Correction Substitutions GP' )   
@@ -223,6 +278,7 @@ SELECT mrn,csn,
               then 'Rec enhancement: ' || result_val
           when result_text in ('Correct Recommend Lens Enhance Sub GL')
               then 'Rec enhancement subs: ' || result_val
+          */
           else result_val
        end as epic_data_val
      --  listagg(result_val,',') within group(order by result_val)   

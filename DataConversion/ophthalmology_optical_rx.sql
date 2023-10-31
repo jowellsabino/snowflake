@@ -23,7 +23,8 @@ CREATE OR REPLACE TEMP FILE FORMAT csv_ophtho
 
  /* Need to put the file contents on personal staging area in Snowflake 
     Alias-mapped omv6/NAS to /Users/jowell/Docuemnts/NAS */
- PUT file:///Users/jowell/Documents/Epic/ec_ophtho_map.csv @~/ec_ophtho_map.csv AUTO_COMPRESS=FALSE OVERWRITE=TRUE;
+ /* PUT file:///Users/jowell/Documents/Epic/ec_ophtho_map_OpticalRx.csv @~/ec_ophtho_map.csv AUTO_COMPRESS=FALSE OVERWRITE=TRUE; */
+ PUT file://Z:/Epic/ec_ophtho_map_OpticalRx.csv @~/ec_ophtho_map.csv AUTO_COMPRESS=FALSE OVERWRITE=TRUE; 
 
 /* Create a remporary mapping of Cerner-to-Epic concepts 
  * Cerner Opthalmology Code	
@@ -136,7 +137,7 @@ JOIN clinical_event ce_docm
   ON ce_docm.parent_event_id = ce_sect.event_id
  AND ce_docm.valid_until_dt_tm > current_date() 
  AND ce_docm.result_status_cd in (25,34,35) /* Include this so we do not include uncharted EC/DTA's */
-WHERE ce_form.event_end_dt_tm >= dateadd(DAY,-365,current_date()) /* One year's worth of data */
+WHERE ce_form.event_end_dt_tm >= dateadd(DAY,-30,current_date()) /* One year's worth of data */
   AND ce_form.valid_until_dt_tm > current_date() /* XAK2 */
   AND ce_form.result_status_cd IN (25,34,35) /* Auth, Modified,Modified */
 ),
